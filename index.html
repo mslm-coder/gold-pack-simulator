@@ -198,7 +198,7 @@
   <div class="tabs">
     <div class="tab active" onclick="switchTab('sim')">Simulator</div>
     <div class="tab" onclick="switchTab('tracker')">My Runs</div>
-    <div class="tab" onclick="switchTab('admin')" style="color:var(--border)">⚙</div>
+    <div class="tab" id="adminTab" onclick="switchTab('admin')" style="display:none;color:var(--text-dim)">⚙</div>
   </div>
   <div class="user-pill" id="userPill" style="display:none">
     <img class="user-avatar" id="userAvatar" src="" alt="" />
@@ -328,22 +328,10 @@
 <div id="panel-admin" class="panel">
   <div style="padding:1.5rem 2rem;max-width:800px;">
 
-    <!-- Password gate -->
-    <div id="adminGate" style="max-width:360px;">
-      <div style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:var(--gold);letter-spacing:0.04em;margin-bottom:8px;">Admin Panel</div>
-      <div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-dim);margin-bottom:1rem;">Enter password to access settings</div>
-      <div style="display:flex;gap:8px;">
-        <input type="password" class="form-input" id="adminPwInput" placeholder="Password" style="flex:1" onkeydown="if(event.key==='Enter')checkAdminPw()" />
-        <button class="btn btn-primary" onclick="checkAdminPw()">Enter</button>
-      </div>
-      <div id="adminPwErr" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--red);margin-top:8px;display:none">Incorrect password</div>
-    </div>
-
-    <!-- Admin content (hidden until unlocked) -->
-    <div id="adminContent" style="display:none;">
+    <!-- Admin content -->
+    <div id="adminContent">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;">
         <div style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:var(--gold);letter-spacing:0.04em;">Admin Panel</div>
-        <button class="btn btn-secondary" onclick="lockAdmin()" style="font-size:11px;padding:6px 12px;">Lock</button>
       </div>
 
       <!-- QS Values -->
@@ -395,7 +383,6 @@
 
 <script>
 // ══ CONSTANTS ══
-const ADMIN_PW = 'TheMLBShowGrindGG!';
 const ADMIN_QS_KEY = 'admin-qs-values';
 const ADMIN_COST_KEY = 'admin-pack-cost';
 const ADMIN_PLAYERS_KEY = 'admin-players';
@@ -743,26 +730,7 @@ function renderHistory(){
 }
 
 // ══ ADMIN ══
-function checkAdminPw(){
-  const val=document.getElementById('adminPwInput').value;
-  if(val===ADMIN_PW){
-    document.getElementById('adminGate').style.display='none';
-    document.getElementById('adminContent').style.display='block';
-    initAdminUI();
-  } else {
-    document.getElementById('adminPwErr').style.display='block';
-    setTimeout(()=>document.getElementById('adminPwErr').style.display='none',2000);
-  }
-}
-
-function lockAdmin(){
-  document.getElementById('adminGate').style.display='block';
-  document.getElementById('adminContent').style.display='none';
-  document.getElementById('adminPwInput').value='';
-}
-
 function initAdminUI(){
-  if(document.getElementById('adminContent').style.display==='none') return;
   // QS editor
   const qsEl=document.getElementById('qsEditor');
   qsEl.innerHTML=[80,81,82,83,84].map(ovr=>`
@@ -857,8 +825,11 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 let currentUser = null;
 
+const OWNER_EMAIL = 'showgrindgg@gmail.com';
+
 function showApp(user) {
   document.getElementById('authScreen').style.display = 'none';
+  const adminTab = document.getElementById('adminTab');
   if (user) {
     document.getElementById('userPill').style.display = 'flex';
     document.getElementById('guestPill').style.display = 'none';
@@ -866,9 +837,12 @@ function showApp(user) {
     document.getElementById('userName').textContent = user.displayName?.split(' ')[0] || user.email;
     const nameInput = document.getElementById('logName');
     if (nameInput && !nameInput.value) nameInput.value = user.displayName?.split(' ')[0] || '';
+    // Show admin tab only for owner
+    adminTab.style.display = user.email === OWNER_EMAIL ? 'block' : 'none';
   } else {
     document.getElementById('userPill').style.display = 'none';
     document.getElementById('guestPill').style.display = 'flex';
+    adminTab.style.display = 'none';
   }
 }
 
@@ -961,3 +935,4 @@ window.deleteRun = async function(id) {
 </script>
 </body>
 </html>
+
