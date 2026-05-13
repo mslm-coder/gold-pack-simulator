@@ -198,6 +198,7 @@
   <div class="tabs">
     <div class="tab active" onclick="switchTab('sim')">Simulator</div>
     <div class="tab" onclick="switchTab('tracker')">My Runs</div>
+    <div class="tab" onclick="switchTab('admin')" style="color:var(--border)">⚙</div>
   </div>
   <div class="user-pill" id="userPill" style="display:none">
     <img class="user-avatar" id="userAvatar" src="" alt="" />
@@ -323,15 +324,90 @@
   </div>
 </div>
 
+<!-- ══ TAB 3: ADMIN ══ -->
+<div id="panel-admin" class="panel">
+  <div style="padding:1.5rem 2rem;max-width:800px;">
+
+    <!-- Password gate -->
+    <div id="adminGate" style="max-width:360px;">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:var(--gold);letter-spacing:0.04em;margin-bottom:8px;">Admin Panel</div>
+      <div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text-dim);margin-bottom:1rem;">Enter password to access settings</div>
+      <div style="display:flex;gap:8px;">
+        <input type="password" class="form-input" id="adminPwInput" placeholder="Password" style="flex:1" onkeydown="if(event.key==='Enter')checkAdminPw()" />
+        <button class="btn btn-primary" onclick="checkAdminPw()">Enter</button>
+      </div>
+      <div id="adminPwErr" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--red);margin-top:8px;display:none">Incorrect password</div>
+    </div>
+
+    <!-- Admin content (hidden until unlocked) -->
+    <div id="adminContent" style="display:none;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:var(--gold);letter-spacing:0.04em;">Admin Panel</div>
+        <button class="btn btn-secondary" onclick="lockAdmin()" style="font-size:11px;padding:6px 12px;">Lock</button>
+      </div>
+
+      <!-- QS Values -->
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:1.5rem;margin-bottom:1rem;">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:1.2rem;color:var(--gold);letter-spacing:0.04em;margin-bottom:1rem;">Quicksell Values</div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;" id="qsEditor"></div>
+        <div style="margin-top:1rem;display:flex;gap:8px;">
+          <button class="btn btn-primary" onclick="saveQS()">Save QS Values</button>
+          <span id="qsSaved" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--green);align-self:center;display:none">✓ Saved</span>
+        </div>
+      </div>
+
+      <!-- Pack Cost -->
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:1.5rem;margin-bottom:1rem;">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:1.2rem;color:var(--gold);letter-spacing:0.04em;margin-bottom:1rem;">Pack Cost</div>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <input type="number" class="form-input" id="packCostEditor" style="width:120px;" />
+          <button class="btn btn-primary" onclick="savePackCost()">Save</button>
+          <span id="packCostSaved" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--green);display:none">✓ Saved</span>
+        </div>
+      </div>
+
+      <!-- Gold Players -->
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:1.5rem;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:1.2rem;color:var(--gold);letter-spacing:0.04em;">Gold Card Pool</div>
+          <div style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text-dim);" id="playerCountLbl"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:1rem;">
+          <input type="text" class="form-input" id="newPlayerName" placeholder="Player name" style="flex:1" />
+          <select class="form-input" id="newPlayerOvr" style="width:80px;">
+            <option value="84">84</option>
+            <option value="83">83</option>
+            <option value="82">82</option>
+            <option value="81" selected>81</option>
+            <option value="80">80</option>
+          </select>
+          <button class="btn btn-primary" onclick="addPlayer()">Add</button>
+        </div>
+        <div style="max-height:400px;overflow-y:auto;" id="playerList"></div>
+        <div style="margin-top:1rem;display:flex;gap:8px;">
+          <button class="btn btn-primary" onclick="savePlayers()">Save Card Pool</button>
+          <span id="playersSaved" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--green);align-self:center;display:none">✓ Saved & live</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 // ══ CONSTANTS ══
-const PACK_COST = 600;
-const QS = {80:400,81:600,82:900,83:1200,84:1600};
+const ADMIN_PW = 'TheMLBShowGrindGG!';
+const ADMIN_QS_KEY = 'admin-qs-values';
+const ADMIN_COST_KEY = 'admin-pack-cost';
+const ADMIN_PLAYERS_KEY = 'admin-players';
+const STORAGE_KEY = 'gold-tracker-runs-v1';
 const EXP = {80:28/81,81:26/81,82:11/81,83:12/81,84:4/81};
 const OC = {84:'var(--diamond)',83:'var(--purple)',82:'var(--gold)',81:'#94a3b8',80:'var(--text-dim)'};
-const STORAGE_KEY = 'gold-tracker-runs-v1';
 
-const PLAYERS = [
+// Mutable — can be updated by admin
+let PACK_COST = parseInt(localStorage.getItem(ADMIN_COST_KEY)) || 600;
+let QS = JSON.parse(localStorage.getItem(ADMIN_QS_KEY) || 'null') || {80:400,81:600,82:900,83:1200,84:1600};
+
+const DEFAULT_PLAYERS = [
   {name:'Yandy Díaz',ovr:84},{name:'Matt Olson',ovr:84},{name:'Shea Langeliers',ovr:84},{name:'Nico Hoerner',ovr:84},
   {name:'Shota Imanaga',ovr:83},{name:'William Contreras',ovr:83},{name:'Elly De La Cruz',ovr:83},{name:'Drake Baldwin',ovr:83},
   {name:'Pete Crow-Armstrong',ovr:83},{name:'Jackson Chourio',ovr:83},{name:'Freddy Peralta',ovr:83},{name:'Bryan Woo',ovr:83},
@@ -355,19 +431,26 @@ const PLAYERS = [
   {name:'Jason Adam',ovr:80},{name:'Dylan Lee',ovr:80},{name:'Logan Webb',ovr:80},{name:'Jacob Misiorowski',ovr:80},
 ];
 
-const SORTED_PLAYERS = [...PLAYERS].sort((a,b)=>{
-  if(b.ovr!==a.ovr)return b.ovr-a.ovr;
-  const lastName=n=>n.split(' ').pop().replace(/[^a-zA-Z]/g,'');
-  return lastName(a.name).localeCompare(lastName(b.name));
-});
+let PLAYERS = JSON.parse(localStorage.getItem(ADMIN_PLAYERS_KEY) || 'null') || DEFAULT_PLAYERS;
+
+function getSortedPlayers(){
+  return [...PLAYERS].sort((a,b)=>{
+    if(b.ovr!==a.ovr)return b.ovr-a.ovr;
+    const lastName=n=>n.split(' ').pop().replace(/[^a-zA-Z]/g,'');
+    return lastName(a.name).localeCompare(lastName(b.name));
+  });
+}
+let SORTED_PLAYERS = getSortedPlayers();
 const PLAYER_OPTS = SORTED_PLAYERS.map(p=>`<option value="${p.name}|${p.ovr}">${p.ovr} — ${p.name}</option>`).join('');
 
 // ══ TABS ══
 function switchTab(t) {
-  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',(i===0&&t==='sim')||(i===1&&t==='tracker')));
+  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',(i===0&&t==='sim')||(i===1&&t==='tracker')||(i===2&&t==='admin')));
   document.getElementById('panel-sim').classList.toggle('active',t==='sim');
   document.getElementById('panel-tracker').classList.toggle('active',t==='tracker');
+  document.getElementById('panel-admin').classList.toggle('active',t==='admin');
   if(t==='tracker') loadTracker();
+  if(t==='admin') initAdminUI();
 }
 
 // ══ SIMULATOR ══
@@ -659,6 +742,98 @@ function renderHistory(){
   }).join('');
 }
 
+// ══ ADMIN ══
+function checkAdminPw(){
+  const val=document.getElementById('adminPwInput').value;
+  if(val===ADMIN_PW){
+    document.getElementById('adminGate').style.display='none';
+    document.getElementById('adminContent').style.display='block';
+    initAdminUI();
+  } else {
+    document.getElementById('adminPwErr').style.display='block';
+    setTimeout(()=>document.getElementById('adminPwErr').style.display='none',2000);
+  }
+}
+
+function lockAdmin(){
+  document.getElementById('adminGate').style.display='block';
+  document.getElementById('adminContent').style.display='none';
+  document.getElementById('adminPwInput').value='';
+}
+
+function initAdminUI(){
+  if(document.getElementById('adminContent').style.display==='none') return;
+  // QS editor
+  const qsEl=document.getElementById('qsEditor');
+  qsEl.innerHTML=[80,81,82,83,84].map(ovr=>`
+    <div>
+      <div style="font-family:'DM Mono',monospace;font-size:10px;color:${OC[ovr]};text-transform:uppercase;margin-bottom:4px">${ovr} OVR</div>
+      <input type="number" class="form-input" id="qs_${ovr}" value="${QS[ovr]}" style="text-align:center" />
+    </div>`).join('');
+  // Pack cost
+  document.getElementById('packCostEditor').value=PACK_COST;
+  // Player list
+  renderAdminPlayers();
+}
+
+function renderAdminPlayers(){
+  const sorted=getSortedPlayers();
+  document.getElementById('playerCountLbl').textContent=sorted.length+' cards';
+  document.getElementById('playerList').innerHTML=sorted.map((p,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
+      <span style="font-family:'DM Mono',monospace;font-size:11px;color:${OC[p.ovr]};width:28px">${p.ovr}</span>
+      <span style="flex:1;font-size:13px">${p.name}</span>
+      <button onclick="removePlayer('${p.name.replace(/'/g,"\\'")}',${p.ovr})" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:13px;opacity:.4;padding:0 4px;" onmouseover="this.style.opacity=1;this.style.color='var(--red)'" onmouseout="this.style.opacity=.4;this.style.color='var(--text-dim)'">✕</button>
+    </div>`).join('');
+}
+
+function addPlayer(){
+  const name=document.getElementById('newPlayerName').value.trim();
+  const ovr=parseInt(document.getElementById('newPlayerOvr').value);
+  if(!name){alert('Enter player name');return;}
+  if(PLAYERS.find(p=>p.name.toLowerCase()===name.toLowerCase())){alert('Player already exists');return;}
+  PLAYERS.push({name,ovr});
+  SORTED_PLAYERS.length=0;
+  getSortedPlayers().forEach(p=>SORTED_PLAYERS.push(p));
+  document.getElementById('newPlayerName').value='';
+  renderAdminPlayers();
+}
+
+function removePlayer(name,ovr){
+  PLAYERS=PLAYERS.filter(p=>!(p.name===name&&p.ovr===ovr));
+  SORTED_PLAYERS.length=0;
+  getSortedPlayers().forEach(p=>SORTED_PLAYERS.push(p));
+  renderAdminPlayers();
+}
+
+function saveQS(){
+  [80,81,82,83,84].forEach(ovr=>{
+    const val=parseInt(document.getElementById('qs_'+ovr).value);
+    if(!isNaN(val)) QS[ovr]=val;
+  });
+  localStorage.setItem(ADMIN_QS_KEY,JSON.stringify(QS));
+  const el=document.getElementById('qsSaved');
+  el.style.display='inline';setTimeout(()=>el.style.display='none',2000);
+}
+
+function savePackCost(){
+  const val=parseInt(document.getElementById('packCostEditor').value);
+  if(!isNaN(val)&&val>0){
+    PACK_COST=val;
+    localStorage.setItem(ADMIN_COST_KEY,String(val));
+  }
+  const el=document.getElementById('packCostSaved');
+  el.style.display='inline';setTimeout(()=>el.style.display='none',2000);
+}
+
+function savePlayers(){
+  localStorage.setItem(ADMIN_PLAYERS_KEY,JSON.stringify(PLAYERS));
+  SORTED_PLAYERS.length=0;
+  getSortedPlayers().forEach(p=>SORTED_PLAYERS.push(p));
+  const el=document.getElementById('playersSaved');
+  el.style.display='inline';setTimeout(()=>el.style.display='none',2000);
+}
+
 // init
 render();
 </script>
@@ -786,4 +961,3 @@ window.deleteRun = async function(id) {
 </script>
 </body>
 </html>
-
