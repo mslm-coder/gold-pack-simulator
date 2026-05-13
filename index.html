@@ -179,7 +179,7 @@
 <div class="auth-screen" id="authScreen">
   <div class="auth-box">
     <h2>Gold Exchange</h2>
-    <p>Sign in to save your runs, track your progress, and compete with friends.</p>
+    <p>Sign in to save your runs and track your progress across sessions. Or continue as a guest — runs won't be saved.</p>
     <button class="btn-google" id="signInBtn">
       <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
         <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -189,6 +189,7 @@
       </svg>
       Continue with Google
     </button>
+    <button onclick="continueAsGuest()" style="margin-top:10px;width:100%;padding:11px;background:transparent;border:1px solid var(--border);color:var(--text-dim);border-radius:6px;font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;">Continue as Guest</button>
   </div>
 </div>
 
@@ -202,6 +203,10 @@
     <img class="user-avatar" id="userAvatar" src="" alt="" />
     <span class="user-name" id="userName"></span>
     <button class="btn-signout" id="signOutBtn">Sign out</button>
+  </div>
+  <div class="user-pill" id="guestPill" style="display:none">
+    <span class="user-name">Guest</span>
+    <button class="btn-signout" id="signInHeaderBtn" style="border-color:var(--gold-dim);color:var(--gold)">Sign in</button>
   </div>
 </div>
 
@@ -677,42 +682,51 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 let currentUser = null;
 
-// ── Auth UI ──
-document.getElementById('signInBtn').addEventListener('click', async () => {
+function showApp(user) {
+  document.getElementById('authScreen').style.display = 'none';
+  if (user) {
+    document.getElementById('userPill').style.display = 'flex';
+    document.getElementById('guestPill').style.display = 'none';
+    document.getElementById('userAvatar').src = user.photoURL || '';
+    document.getElementById('userName').textContent = user.displayName?.split(' ')[0] || user.email;
+    const nameInput = document.getElementById('logName');
+    if (nameInput && !nameInput.value) nameInput.value = user.displayName?.split(' ')[0] || '';
+  } else {
+    document.getElementById('userPill').style.display = 'none';
+    document.getElementById('guestPill').style.display = 'flex';
+  }
+}
+
+// Guest continue
+window.continueAsGuest = function() {
+  showApp(null);
+  runs = [];
+  renderHistory();
+};
+
+// Sign in
+async function doSignIn() {
   try {
     const provider = new GoogleAuthProvider();
     await signInWithPopup(auth, provider);
   } catch(e) { console.error(e); }
-});
+}
 
+document.getElementById('signInBtn').addEventListener('click', doSignIn);
+document.getElementById('signInHeaderBtn').addEventListener('click', doSignIn);
 document.getElementById('signOutBtn').addEventListener('click', () => signOut(auth));
 
 onAuthStateChanged(auth, async (user) => {
   currentUser = user;
-  const authScreen = document.getElementById('authScreen');
-  const userPill = document.getElementById('userPill');
-
   if (user) {
-    // Hide auth screen, show user pill
-    authScreen.style.display = 'none';
-    userPill.style.display = 'flex';
-    document.getElementById('userAvatar').src = user.photoURL || '';
-    document.getElementById('userName').textContent = user.displayName?.split(' ')[0] || user.email;
-
-    // Pre-fill name in tracker
-    const nameInput = document.getElementById('logName');
-    if (nameInput && !nameInput.value) nameInput.value = user.displayName?.split(' ')[0] || '';
-
-    // Load runs from Firestore
+    showApp(user);
     await loadRunsFromFirestore();
     renderHistory();
-  } else {
-    authScreen.style.display = 'flex';
-    userPill.style.display = 'none';
   }
+  // If no user and auth screen still showing, let user choose — don't auto-hide
 });
 
-// ── Firestore run storage ──
+// ── Firestore ──
 async function loadRunsFromFirestore() {
   if (!currentUser) return;
   try {
@@ -722,7 +736,6 @@ async function loadRunsFromFirestore() {
   } catch(e) { console.error('Load error:', e); }
 }
 
-// Override saveRuns to use Firestore
 window.saveRunToFirestore = async function(run) {
   if (!currentUser) return;
   try {
@@ -738,8 +751,6 @@ window.deleteRunFromFirestore = async function(firestoreId) {
   } catch(e) { console.error('Delete error:', e); }
 };
 
-// Patch submitRun to save to Firestore
-const _origSubmit = window.submitRun;
 window.submitRun = async function() {
   const name = document.getElementById('logName').value.trim();
   if (!name) { alert('Enter your name'); return; }
@@ -750,22 +761,26 @@ window.submitRun = async function() {
   const spent = packs * PACK_COST;
   const run = { id: Date.now(), name, packs, pulls, revenue, spent, profit: revenue - spent, date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) };
   runs.unshift(run);
-  // Save to Firestore
-  await window.saveRunToFirestore(run);
-  // Also keep localStorage as backup
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(runs)); } catch(e) {}
+  if (currentUser) {
+    await window.saveRunToFirestore(run);
+  } else {
+    // Guest — show notice that run won't persist
+    const msg = document.getElementById('successMsg');
+    msg.textContent = '✓ Run logged — sign in to save permanently';
+    msg.style.display = 'block'; setTimeout(() => { msg.style.display = 'none'; msg.textContent = '✓ Run logged successfully!'; }, 4000);
+  }
   renderHistory();
   clearForm();
-  const msg = document.getElementById('successMsg');
-  msg.style.display = 'block'; setTimeout(() => msg.style.display = 'none', 3000);
+  if (currentUser) {
+    const msg = document.getElementById('successMsg');
+    msg.style.display = 'block'; setTimeout(() => msg.style.display = 'none', 3000);
+  }
 };
 
-// Patch deleteRun to delete from Firestore
 window.deleteRun = async function(id) {
   const run = runs.find(r => r.id === id);
   if (run?.firestoreId) await window.deleteRunFromFirestore(run.firestoreId);
   runs = runs.filter(r => r.id !== id);
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(runs)); } catch(e) {}
   renderHistory();
 };
 </script>
