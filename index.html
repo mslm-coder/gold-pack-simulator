@@ -242,15 +242,11 @@
           <label>Your Name</label>
           <input type="text" class="form-input" id="logName" placeholder="e.g. Max" maxlength="30" />
         </div>
-        <div class="form-group" style="max-width:100px">
-          <label>Packs</label>
-          <input type="number" class="form-input" id="logPacks" placeholder="100" min="1" max="999" />
-        </div>
       </div>
       <div class="pulls-section">
         <div class="pulls-section-header">
-          <span>Pulls — add each card you pulled</span>
-          <span id="pullCountLbl" style="color:var(--gold)">0 pulls</span>
+          <span>Pulls — each pull = 1 pack</span>
+          <span id="pullCountLbl" style="color:var(--gold)">0 pulls · 0 stubs spent</span>
         </div>
         <div class="pull-entries" id="pullEntriesList"></div>
         <button class="add-pull-btn" onclick="addPullEntry()">+ Add Pull</button>
@@ -482,11 +478,24 @@ function addPullEntry(){
   const list=document.getElementById('pullEntriesList');
   const row=document.createElement('div');
   row.className='pull-entry-row';
+  row.dataset.held='false';
   const ss=makeSearchSelect();
-  row.appendChild(ss);
+  // hold toggle
+  const holdBtn=document.createElement('button');
+  holdBtn.className='pull-action hold';holdBtn.textContent='HOLD';holdBtn.type='button';
+  holdBtn.style.cssText='padding:4px 8px;font-size:10px;flex-shrink:0;';
+  holdBtn.onclick=()=>{
+    const isHeld=row.dataset.held==='true';
+    row.dataset.held=isHeld?'false':'true';
+    holdBtn.textContent=isHeld?'HOLD':'HELD';
+    holdBtn.className=isHeld?'pull-action hold':'pull-action unhold';
+    updatePullCount();
+  };
   const rm=document.createElement('button');
-  rm.className='rm-btn';rm.textContent='×';
+  rm.className='rm-btn';rm.textContent='×';rm.type='button';
   rm.onclick=()=>{row.remove();updatePullCount();};
+  row.appendChild(ss);
+  row.appendChild(holdBtn);
   row.appendChild(rm);
   list.appendChild(row);
   updatePullCount();
@@ -494,29 +503,40 @@ function addPullEntry(){
 }
 
 function updatePullCount(){
-  const filled=[...document.querySelectorAll('#pullEntriesList .search-select')].filter(s=>s.dataset.value).length;
-  document.getElementById('pullCountLbl').textContent=filled+' pull'+(filled!==1?'s':'');
+  const rows=[...document.querySelectorAll('#pullEntriesList .pull-entry-row')];
+  const total=rows.length;
+  const spent=total*PACK_COST;
+  document.getElementById('pullCountLbl').textContent=`${total} pull${total!==1?'s':''} · ${spent.toLocaleString()} stubs spent`;
   updateLivePreview();
 }
 
+function getPullsFromForm(){
+  return [...document.querySelectorAll('#pullEntriesList .pull-entry-row')].map(row=>{
+    const ss=row.querySelector('.search-select');
+    const val=ss?ss.dataset.value:'';
+    if(!val)return null;
+    const[n,o]=val.split('|');
+    return{name:n,ovr:parseInt(o),qs:QS[parseInt(o)],held:row.dataset.held==='true'};
+  }).filter(Boolean);
+}
+
 function updateLivePreview(){
-  const packs=parseInt(document.getElementById('logPacks').value)||0;
-  const sels=[...document.querySelectorAll('#pullEntriesList .search-select')];
-  const pulls=sels.filter(s=>s.dataset.value).map(s=>{const[n,o]=s.dataset.value.split('|');return{name:n,ovr:parseInt(o),qs:QS[parseInt(o)]};});
+  const rows=[...document.querySelectorAll('#pullEntriesList .pull-entry-row')];
+  const packs=rows.length;
+  const pulls=getPullsFromForm();
   const preview=document.getElementById('livePreview');
-  if(pulls.length===0&&packs===0){preview.style.display='none';return;}
+  if(packs===0){preview.style.display='none';return;}
   preview.style.display='block';
-  const revenue=pulls.reduce((s,p)=>s+p.qs,0);
+  const revenue=pulls.filter(p=>!p.held).reduce((s,p)=>s+p.qs,0);
   const spent=packs*PACK_COST;
   const pl=revenue-spent;
-  document.getElementById('pvSpent').textContent=spent?spent.toLocaleString():'—';
-  document.getElementById('pvRev').textContent=revenue?revenue.toLocaleString():'—';
+  document.getElementById('pvSpent').textContent=spent.toLocaleString();
+  document.getElementById('pvRev').textContent=revenue?revenue.toLocaleString():'0';
   const plEl=document.getElementById('pvPL');
-  plEl.textContent=pulls.length?(fmt(pl)):'—';
+  plEl.textContent=fmt(pl);
   plEl.style.color=pl>0?'var(--green)':pl<0?'var(--red)':'var(--text-dim)';
-  document.getElementById('pvPulls').textContent=pulls.length;
-  // chips for 82+
-  const chips=pulls.filter(p=>p.ovr>=82).map(p=>`<span class="chip ovr-${p.ovr}">${p.ovr} ${p.name}</span>`).join('');
+  document.getElementById('pvPulls').textContent=packs;
+  const chips=pulls.filter(p=>p.ovr>=82).map(p=>`<span class="chip ovr-${p.ovr}"${p.held?' style="opacity:.45;text-decoration:line-through"':''}>${p.ovr} ${p.name}${p.held?' (held)':''}</span>`).join('');
   const lowCount=pulls.filter(p=>p.ovr<82).length;
   const lowChip=lowCount?`<span class="chip">${lowCount} lower</span>`:'';
   document.getElementById('pvChips').innerHTML=chips+lowChip;
@@ -524,24 +544,19 @@ function updateLivePreview(){
 
 function clearForm(){
   document.getElementById('logName').value='';
-  document.getElementById('logPacks').value='';
   document.getElementById('pullEntriesList').innerHTML='';
-  document.getElementById('pullCountLbl').textContent='0 pulls';
+  document.getElementById('pullCountLbl').textContent='0 pulls · 0 stubs spent';
   document.getElementById('successMsg').style.display='none';
   document.getElementById('livePreview').style.display='none';
 }
 
-document.getElementById('logPacks').addEventListener('input', updateLivePreview);
-
 function submitRun(){
   const name=document.getElementById('logName').value.trim();
-  const packs=parseInt(document.getElementById('logPacks').value);
   if(!name){alert('Enter your name');return;}
-  if(!packs||packs<1){alert('Enter packs opened');return;}
-  const sels=[...document.querySelectorAll('#pullEntriesList .search-select')];
-  const pulls=sels.filter(s=>s.dataset.value).map(s=>{const[n,o]=s.dataset.value.split('|');return{name:n,ovr:parseInt(o),qs:QS[parseInt(o)]};});
+  const pulls=getPullsFromForm();
   if(pulls.length===0){alert('Add at least one pull');return;}
-  const revenue=pulls.reduce((s,p)=>s+p.qs,0);
+  const packs=pulls.length;
+  const revenue=pulls.filter(p=>!p.held).reduce((s,p)=>s+p.qs,0);
   const spent=packs*PACK_COST;
   const run={id:Date.now(),name,packs,pulls,revenue,spent,profit:revenue-spent,date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})};
   runs.unshift(run);
@@ -577,8 +592,9 @@ function renderHistory(){
     const pc=r.profit>=0?'var(--green)':'var(--red)';
     const counts={80:0,81:0,82:0,83:0,84:0};
     for(const p of r.pulls)counts[p.ovr]++;
-    const chips=r.pulls.filter(p=>p.ovr>=82).map(p=>`<span class="chip ovr-${p.ovr}">${p.ovr} ${p.name}</span>`).join('');
-    const lowCount=r.pulls.filter(p=>p.ovr<82).length;
+    const heldCount=r.pulls.filter(p=>p.held).length;
+    const chips=r.pulls.filter(p=>p.ovr>=82).map(p=>`<span class="chip ovr-${p.ovr}"${p.held?' style="opacity:.45;text-decoration:line-through"':''}>${p.ovr} ${p.name}${p.held?' ⟳':''}</span>`).join('');
+    const lowCount=r.pulls.filter(p=>p.ovr<82&&!p.held).length;
     const lowChip=lowCount?`<span class="chip">${lowCount} lower</span>`:'';
     return`<div class="run-card">
       <div class="run-card-top">
@@ -594,6 +610,7 @@ function renderHistory(){
         <div class="run-stat">84s: <span style="color:var(--diamond)">${counts[84]}</span></div>
         <div class="run-stat">83s: <span style="color:var(--purple)">${counts[83]}</span></div>
         <div class="run-stat">82s: <span style="color:var(--gold)">${counts[82]}</span></div>
+        ${heldCount?`<div class="run-stat">Held: <span style="color:var(--diamond)">${heldCount}</span></div>`:''}
       </div>
       ${chips||lowChip?`<div class="run-pulls-chips">${chips}${lowChip}</div>`:''}
     </div>`;
