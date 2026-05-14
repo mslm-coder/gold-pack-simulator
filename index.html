@@ -31,29 +31,15 @@
   .cta-secondary:hover{border-color:var(--gold-dim);color:var(--text);}
   .home-features{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--border);border-top:1px solid var(--border);}
 
-  /* ── CARD FLIP ANIMATION ── */
-  .card-flip-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:800;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s;}
-  .card-flip-overlay.show{opacity:1;pointer-events:all;}
-  .card-scene{width:220px;height:300px;perspective:800px;}
-  .card-inner{width:100%;height:100%;position:relative;transform-style:preserve-3d;transition:transform .5s cubic-bezier(.4,0,.2,1);}
-  .card-inner.flipped{transform:rotateY(180deg);}
-  .card-face{position:absolute;inset:0;backface-visibility:hidden;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;}
-  .card-back{background:linear-gradient(135deg,var(--bg2) 0%,var(--bg3) 100%);border:2px solid var(--border);cursor:pointer;}
-  .card-back-logo{font-family:'Bebas Neue',sans-serif;font-size:2.5rem;color:var(--gold);letter-spacing:0.1em;}
-  .card-back-sub{font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);letter-spacing:0.15em;text-transform:uppercase;}
-  .card-back::after{content:'TAP TO REVEAL';position:absolute;bottom:16px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.12em;color:var(--text-dim);animation:pulse 1.5s ease-in-out infinite;}
-  @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
-  .card-front{transform:rotateY(180deg);border:2px solid;}
-  .card-front.rarity-84{background:linear-gradient(135deg,#0a1f2e 0%,#0d2a3d 50%,#0a1f2e 100%);border-color:var(--diamond);box-shadow:0 0 30px rgba(96,200,245,.3);}
-  .card-front.rarity-83{background:linear-gradient(135deg,#160f2e 0%,#1e1040 50%,#160f2e 100%);border-color:var(--purple);box-shadow:0 0 30px rgba(167,139,250,.3);}
-  .card-front.rarity-82{background:linear-gradient(135deg,#1a1400 0%,#261e00 50%,#1a1400 100%);border-color:var(--gold);box-shadow:0 0 30px rgba(245,200,66,.25);}
-  .card-front.rarity-81{background:linear-gradient(135deg,#0f141a 0%,#151c24 50%,#0f141a 100%);border-color:#94a3b8;box-shadow:none;}
-  .card-front.rarity-80{background:linear-gradient(135deg,#111112 0%,#1a1a1c 50%,#111112 100%);border-color:var(--border);box-shadow:none;}
-  .card-ovr-badge{font-family:'Bebas Neue',sans-serif;font-size:3.5rem;line-height:1;letter-spacing:0.04em;}
-  .card-name{font-family:'Bebas Neue',sans-serif;font-size:1.1rem;letter-spacing:0.06em;text-align:center;padding:0 12px;}
-  .card-qs{font-family:'DM Mono',monospace;font-size:12px;padding:4px 12px;border-radius:3px;background:rgba(255,255,255,.08);}
-  .card-tap-hint{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.1em;color:rgba(255,255,255,.4);position:absolute;bottom:14px;text-transform:uppercase;}
-  .card-close{position:absolute;top:16px;right:16px;background:none;border:none;color:var(--text-dim);font-size:22px;cursor:pointer;z-index:10;line-height:1;}
+  /* ── NAMEPLATE FLIP ── */
+  @keyframes nameplateFlip{
+    0%{transform:rotateX(90deg);opacity:0;}
+    60%{transform:rotateX(-8deg);opacity:1;}
+    80%{transform:rotateX(4deg);}
+    100%{transform:rotateX(0deg);opacity:1;}
+  }
+  .pull-card.new-reveal{animation:nameplateFlip .45s cubic-bezier(.4,0,.2,1) forwards;}
+  .pull-card.ovr-84.new-reveal{animation:nameplateFlip .45s cubic-bezier(.4,0,.2,1) forwards, goldFlash .8s ease .1s;}
   .home-feat{background:var(--bg);padding:2rem;text-align:center;}
   .home-feat-icon{font-family:'Bebas Neue',sans-serif;font-size:2.5rem;color:var(--gold);letter-spacing:0.04em;margin-bottom:8px;}
   .home-feat-title{font-size:14px;font-weight:600;margin-bottom:6px;}
@@ -259,25 +245,6 @@
 <script type="module" src="https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js"></script>
 </head>
 <body>
-
-<!-- CARD FLIP OVERLAY -->
-<div class="card-flip-overlay" id="cardFlipOverlay" onclick="handleOverlayClick(event)">
-  <button class="card-close" onclick="closeCardFlip()">✕</button>
-  <div class="card-scene">
-    <div class="card-inner" id="cardInner">
-      <div class="card-face card-back" onclick="flipCard()">
-        <div class="card-back-logo">SG</div>
-        <div class="card-back-sub">Gold Exchange</div>
-      </div>
-      <div class="card-face card-front" id="cardFront">
-        <div class="card-ovr-badge" id="cardOvr"></div>
-        <div class="card-name" id="cardName"></div>
-        <div class="card-qs" id="cardQsVal"></div>
-        <div class="card-tap-hint">Tap anywhere to close</div>
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- AUTH SCREEN -->
 <div class="auth-screen" id="authScreen">
@@ -604,54 +571,19 @@ function recalc(){
   S.revenue=ch.reduce((s,p)=>s+(p.held?0:p.qs),0);
 }
 
+let lastRevealPack = -1;
+
 function simOpen(n){
   const count=Math.min(n,S.totalPacks-S.packsOpened);
   for(let i=0;i<count;i++){
     const c=simPull();S.packsOpened++;
     S.pulls.unshift({...c,qs:QS[c.ovr],pl:0,packNum:S.packsOpened,held:false});
   }
-  recalc();render();
-  // Show card flip only for single pack opens
-  if(n===1&&count===1){
-    const latest=S.pulls[0];
-    showCardFlip(latest);
-  }
+  recalc();
+  lastRevealPack = (n===1&&count===1) ? S.pulls[0].packNum : -1;
+  render();
 }
-function simOpenAll(){simOpen(S.totalPacks-S.packsOpened);}
-
-function showCardFlip(card){
-  const overlay=document.getElementById('cardFlipOverlay');
-  const inner=document.getElementById('cardInner');
-  const front=document.getElementById('cardFront');
-  // Reset
-  inner.classList.remove('flipped');
-  front.className=`card-face card-front rarity-${card.ovr}`;
-  // Set content
-  document.getElementById('cardOvr').textContent=card.ovr;
-  document.getElementById('cardOvr').style.color=OC[card.ovr];
-  document.getElementById('cardName').textContent=card.name;
-  document.getElementById('cardQsVal').textContent=QS[card.ovr].toLocaleString()+' QS';
-  // Show
-  overlay.classList.add('show');
-}
-
-function flipCard(){
-  document.getElementById('cardInner').classList.add('flipped');
-}
-
-function closeCardFlip(){
-  document.getElementById('cardFlipOverlay').classList.remove('show');
-  // Reset flip for next open
-  setTimeout(()=>document.getElementById('cardInner').classList.remove('flipped'),300);
-}
-
-function handleOverlayClick(e){
-  // Close if clicking backdrop or already flipped
-  const inner=document.getElementById('cardInner');
-  if(e.target===document.getElementById('cardFlipOverlay')||inner.classList.contains('flipped')){
-    closeCardFlip();
-  }
-}
+function simOpenAll(){lastRevealPack=-1;simOpen(S.totalPacks-S.packsOpened);}
 
 function holdCard(idx){
   const p=S.pulls[idx];if(p.held)return;
@@ -695,8 +627,9 @@ function render(){
   if(S.pulls.length===0){wrap.innerHTML=`<div class="feed-empty"><div class="big-icon">GOLD</div><p>Set pack count and open to begin</p></div>`;return;}
   wrap.innerHTML=S.pulls.map((p,i)=>{
     const pc=p.pl>0?'pos':p.pl<0?'neg':'zero';
+    const isNew = p.packNum === lastRevealPack;
     const btn=p.held?`<button class="pull-action unhold" onclick="unholdCard(${i})">UNHOLD</button>`:`<button class="pull-action hold" onclick="holdCard(${i})">HOLD</button>`;
-    return`<div class="pull-card ovr-${p.ovr}${p.held?' is-held':''}">
+    return`<div class="pull-card ovr-${p.ovr}${p.held?' is-held':''}${isNew?' new-reveal':''}">
       <div class="pull-num">${p.packNum}</div>
       <div class="pull-ovr ovr-${p.ovr}">${p.ovr}</div>
       <div class="pull-name">${p.name}</div>
