@@ -38,8 +38,8 @@
     80%{transform:rotateX(4deg);}
     100%{transform:rotateX(0deg);opacity:1;}
   }
-  .pull-card.new-reveal{animation:nameplateFlip .8s cubic-bezier(.4,0,.2,1) forwards;}
-  .pull-card.ovr-84.new-reveal{animation:nameplateFlip .8s cubic-bezier(.4,0,.2,1) forwards, goldFlash .8s ease .1s;}
+  .pull-card.new-reveal{animation:nameplateFlip .45s cubic-bezier(.4,0,.2,1) forwards;}
+  .pull-card.ovr-84.new-reveal{animation:nameplateFlip .45s cubic-bezier(.4,0,.2,1) forwards, goldFlash .8s ease .1s;}
   .home-feat{background:var(--bg);padding:2rem;text-align:center;}
   .home-feat-icon{font-family:'Bebas Neue',sans-serif;font-size:2.5rem;color:var(--gold);letter-spacing:0.04em;margin-bottom:8px;}
   .home-feat-title{font-size:14px;font-weight:600;margin-bottom:6px;}
@@ -345,7 +345,13 @@
         <div id="bkRows"></div>
       </div>
       <div class="hold-box">
-        <div class="hold-title"><span>Held Cards</span><span id="holdVal" style="color:var(--gold);font-size:11px"></span></div>
+        <div class="hold-title">
+          <span>Held Cards</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button onclick="holdAll84s()" style="font-family:'DM Mono',monospace;font-size:9px;letter-spacing:0.06em;text-transform:uppercase;padding:3px 8px;background:rgba(96,200,245,.12);color:var(--diamond);border:1px solid rgba(96,200,245,.3);border-radius:3px;cursor:pointer;">Hold All 84s</button>
+            <span id="holdVal" style="color:var(--gold);font-size:11px"></span>
+          </div>
+        </div>
         <div id="holdList"><div style="font-size:12px;color:var(--text-dim);text-align:center;padding:.75rem 0">No cards held</div></div>
       </div>
     </div>
@@ -594,6 +600,18 @@ function unholdCard(idx){
   p.held=false;S.held=S.held.filter(h=>h!==p);recalc();render();
 }
 
+function holdAll84s(){
+  let changed=false;
+  for(const p of S.pulls){if(p.ovr===84&&!p.held){p.held=true;S.held.push(p);changed=true;}}
+  if(changed){recalc();render();}
+}
+
+function holdAllByName(name){
+  let changed=false;
+  for(const p of S.pulls){if(p.name===name&&!p.held){p.held=true;S.held.push(p);changed=true;}}
+  if(changed){recalc();render();}
+}
+
 function render(){
   const left=S.totalPacks-S.packsOpened;
   document.getElementById('packsLeft').textContent=left;
@@ -625,17 +643,26 @@ function render(){
 
   const wrap=document.getElementById('feedWrap');
   if(S.pulls.length===0){wrap.innerHTML=`<div class="feed-empty"><div class="big-icon">GOLD</div><p>Set pack count and open to begin</p></div>`;return;}
+  // Build name counts for "Hold All" logic
+  const nameCounts={};
+  for(const p of S.pulls) nameCounts[p.name]=(nameCounts[p.name]||0)+1;
+
   wrap.innerHTML=S.pulls.map((p,i)=>{
     const pc=p.pl>0?'pos':p.pl<0?'neg':'zero';
     const isNew = p.packNum === lastRevealPack;
-    const btn=p.held?`<button class="pull-action unhold" onclick="unholdCard(${i})">UNHOLD</button>`:`<button class="pull-action hold" onclick="holdCard(${i})">HOLD</button>`;
+    const holdAllBtn = !p.held && nameCounts[p.name]>1
+      ? `<button class="pull-action hold" onclick="holdAllByName('${p.name.replace(/'/g,"\\'")}')" style="font-size:9px;padding:2px 6px;opacity:.7">ALL</button>`
+      : '';
+    const btn=p.held
+      ? `<button class="pull-action unhold" onclick="unholdCard(${i})">UNHOLD</button>`
+      : `<button class="pull-action hold" onclick="holdCard(${i})">HOLD</button>${holdAllBtn}`;
     return`<div class="pull-card ovr-${p.ovr}${p.held?' is-held':''}${isNew?' new-reveal':''}">
       <div class="pull-num">${p.packNum}</div>
       <div class="pull-ovr ovr-${p.ovr}">${p.ovr}</div>
       <div class="pull-name">${p.name}</div>
       <div class="pull-qs"${p.held?' style="text-decoration:line-through;opacity:.4"':''}>${p.qs.toLocaleString()}</div>
       <div class="pull-pl ${pc}">${fmt(p.pl)}</div>
-      <div style="width:58px;text-align:right">${btn}</div>
+      <div style="width:80px;text-align:right;display:flex;gap:3px;justify-content:flex-end;">${btn}</div>
     </div>`;
   }).join('');
 
