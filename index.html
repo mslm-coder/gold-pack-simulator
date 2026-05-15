@@ -491,7 +491,9 @@
         <div style="max-height:400px;overflow-y:auto;" id="playerList"></div>
         <div style="margin-top:1rem;display:flex;gap:8px;">
           <button class="btn btn-primary" onclick="savePlayers()">Save Card Pool</button>
+          <button class="btn btn-secondary" onclick="syncFromAPI()" id="syncBtn" style="font-size:11px">↻ Sync from TheShow API</button>
           <span id="playersSaved" style="font-family:'DM Mono',monospace;font-size:11px;color:var(--green);align-self:center;display:none">✓ Saved & live</span>
+          <span id="syncStatus" style="font-family:'DM Mono',monospace;font-size:11px;align-self:center;display:none"></span>
         </div>
       </div>
     </div>
@@ -949,6 +951,107 @@ function savePlayers(){
   getSortedPlayers().forEach(p=>SORTED_PLAYERS.push(p));
   const el=document.getElementById('playersSaved');
   el.style.display='inline';setTimeout(()=>el.style.display='none',2000);
+}
+
+async function syncFromAPI(){
+  const btn=document.getElementById('syncBtn');
+  const status=document.getElementById('syncStatus');
+  btn.disabled=true;
+  status.style.display='inline';status.style.color='var(--text-dim)';
+
+  const CARD_TYPES=['mlb_card','equipment','stadium','sponsorship','unlockable'];
+  const RARITIES=['diamond','gold','silver','bronze','common'];
+  const fullPool={};
+  let totalFetched=0;
+  let corsBlocked=false;
+
+  async function fetchAllPages(type, rarity){
+    let results=[];
+    for(let page=1;page<=50;page++){
+      const url=`https://mlb26.theshow.com/apis/listings.json?type=${type}&rarity=${rarity}&page=${page}&sort=rank&order=desc`;
+      try{
+        const r=await fetch(url);
+        if(!r.ok) break;
+        const data=await r.json();
+        if(!data.listings||data.listings.length===0) break;
+        results=results.concat(data.listings);
+        status.textContent=`Fetching ${type} ${rarity}... (${totalFetched+results.length} total)`;
+        if(data.total_pages&&page>=data.total_pages) break;
+      } catch(e){ corsBlocked=true; break; }
+    }
+    return results;
+  }
+
+  try{
+    for(const type of CARD_TYPES){
+      fullPool[type]={};
+      for(const rarity of RARITIES){
+        status.textContent=`Fetching ${type} / ${rarity}...`;
+        const cards=await fetchAllPages(type,rarity);
+        if(corsBlocked) break;
+        if(cards.length>0){
+          fullPool[type][rarity]=cards.map(l=>({
+            uuid: l.item?.uuid||'',
+            name: l.listing_name||l.item?.name||'Unknown',
+            rarity: l.item?.rarity||rarity,
+            ovr: l.item?.ovr||null,
+            type,
+            best_sell_price: l.best_sell_price,
+            best_buy_price: l.best_buy_price,
+            team: l.item?.team||'',
+            display_position: l.item?.display_position||'',
+            series: l.item?.series||'',
+          }));
+          totalFetched+=cards.length;
+        }
+        if(corsBlocked) break;
+      }
+      if(corsBlocked) break;
+    }
+
+    if(corsBlocked){
+      status.style.color='var(--red)';
+      status.textContent=`CORS blocked after ${totalFetched} cards — partial data saved`;
+    } else {
+      status.style.color='var(--green)';
+      status.textContent=`✓ Full pool synced — ${totalFetched.toLocaleString()} cards across all types`;
+    }
+
+    // Save full pool to localStorage
+    try{ localStorage.setItem('showgrind-full-pool', JSON.stringify(fullPool)); }
+    catch(e){ status.textContent+=' (storage full — try clearing cache)'; }
+
+    // Also update the gold exchange player pool (OVR 80-84 Live Series)
+    const goldCards=fullPool['mlb_card']?.['gold']||[];
+    const newPlayers=goldCards
+      .filter(c=>c.ovr>=80&&c.ovr<=84)
+      .map(c=>({name:c.name,ovr:c.ovr}))
+      .filter((p,i,arr)=>arr.findIndex(x=>x.name===p.name)===i);
+
+    if(newPlayers.length>0){
+      const oldNames=new Set(PLAYERS.map(p=>p.name));
+      const newNames=new Set(newPlayers.map(p=>p.name));
+      const added=newPlayers.filter(p=>!oldNames.has(p.name));
+      const removed=PLAYERS.filter(p=>!newNames.has(p.name));
+      PLAYERS.length=0;
+      newPlayers.forEach(p=>PLAYERS.push(p));
+      SORTED_PLAYERS.length=0;
+      getSortedPlayers().forEach(p=>SORTED_PLAYERS.push(p));
+      localStorage.setItem(ADMIN_PLAYERS_KEY,JSON.stringify(PLAYERS));
+      renderAdminPlayers();
+      const changes=[];
+      if(added.length) changes.push(`+${added.length} added to gold pool`);
+      if(removed.length) changes.push(`-${removed.length} removed from gold pool`);
+      if(changes.length) status.textContent+=' · '+changes.join(', ');
+    }
+
+  } catch(e){
+    status.style.color='var(--red)';
+    status.textContent='Error: '+e.message;
+  }
+
+  btn.disabled=false;btn.textContent='↻ Sync from TheShow API';
+  setTimeout(()=>status.style.display='none',8000);
 }
 
 // init
