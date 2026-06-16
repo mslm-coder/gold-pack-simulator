@@ -505,8 +505,10 @@
 const ADMIN_QS_KEY = 'admin-qs-values';
 const ADMIN_COST_KEY = 'admin-pack-cost';
 const ADMIN_PLAYERS_KEY = 'admin-players';
+const ROSTER_VERSION_KEY = 'admin-players-roster-version';
+const ROSTER_VERSION = 'update-10-2026-06-12';
 const STORAGE_KEY = 'gold-tracker-runs-v1';
-const EXP = {80:28/81,81:26/81,82:11/81,83:12/81,84:4/81};
+const EXP = {80:26/80,81:20/80,82:14/80,83:12/80,84:8/80};
 const OC = {84:'var(--diamond)',83:'var(--purple)',82:'var(--gold)',81:'#94a3b8',80:'var(--text-dim)'};
 
 // Mutable — can be updated by admin
@@ -537,7 +539,17 @@ const DEFAULT_PLAYERS = [
   {name:'Kenley Jansen',ovr:80},{name:'Yimi García',ovr:80},
 ];
 
-let PLAYERS = JSON.parse(localStorage.getItem(ADMIN_PLAYERS_KEY) || 'null') || DEFAULT_PLAYERS;
+let PLAYERS;
+if(localStorage.getItem(ROSTER_VERSION_KEY) !== ROSTER_VERSION){
+  // Roster has been updated since this browser last saved a custom pool — reset to the new default.
+  PLAYERS = DEFAULT_PLAYERS;
+  try{
+    localStorage.setItem(ADMIN_PLAYERS_KEY, JSON.stringify(PLAYERS));
+    localStorage.setItem(ROSTER_VERSION_KEY, ROSTER_VERSION);
+  }catch(e){}
+}else{
+  PLAYERS = JSON.parse(localStorage.getItem(ADMIN_PLAYERS_KEY) || 'null') || DEFAULT_PLAYERS;
+}
 
 function getSortedPlayers(){
   return [...PLAYERS].sort((a,b)=>{
